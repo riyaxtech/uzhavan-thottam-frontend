@@ -1,56 +1,104 @@
 /**
  * Service for Admin API requests.
  * Handles communication with backend admin endpoints with Bearer token authentication.
+ * Includes intelligent multi-target fallback (relative proxy -> direct localhost:5000 -> configured API_URL).
  */
 
-const getAdminApiEndpoint = () => {
-  const isLocalhost = typeof window !== 'undefined' &&
-    (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+let cachedWorkingBase = null;
 
-  if (import.meta.env.DEV || isLocalhost) {
-    const configured = import.meta.env.VITE_API_URL;
-    if (configured && configured.includes('localhost')) {
-      return `${configured.replace(/\/+$/, '')}/api/admin`;
-    }
-    return '/api/admin';
+export const getCandidateBases = () => {
+  if (cachedWorkingBase) {
+    return [cachedWorkingBase];
   }
 
-  const API_URL = import.meta.env.VITE_API_URL ? import.meta.env.VITE_API_URL.replace(/\/+$/, '') : '';
-  return `${API_URL}/api/admin`;
+  const isLocal = typeof window !== 'undefined' && (
+    window.location.hostname === 'localhost' ||
+    window.location.hostname === '127.0.0.1' ||
+    window.location.hostname.startsWith('192.168.') ||
+    window.location.hostname.startsWith('10.') ||
+    window.location.hostname.endsWith('.local')
+  );
+
+  const configured = import.meta.env.VITE_API_URL ? import.meta.env.VITE_API_URL.replace(/\/+$/, '') : '';
+  const bases = [];
+
+  // Priority 1: Relative /api/admin (works seamlessly for Vite proxy & Vercel)
+  bases.push('/api/admin');
+
+  // Priority 2: Direct localhost:5000 if running locally (bypasses any proxy issue)
+  if (isLocal) {
+    bases.push('http://localhost:5000/api/admin');
+    bases.push('http://127.0.0.1:5000/api/admin');
+  }
+
+  // Priority 3: Configured remote URL if present
+  if (configured) {
+    const remoteAdmin = `${configured}/api/admin`;
+    if (!bases.includes(remoteAdmin)) {
+      bases.push(remoteAdmin);
+    }
+  }
+
+  return bases;
 };
 
 /**
- * Common fetch helper with JSON parsing and error handling
+ * Common fetch helper with intelligent endpoint fallback, JSON parsing and error handling
  */
 const request = async (path, options = {}, token = null) => {
-  const base = getAdminApiEndpoint();
-  const url = `${base}${path.startsWith('/') ? path : `/${path}`}`;
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+  const bases = getCandidateBases();
+  let lastError = null;
 
-  const headers = {
-    'Content-Type': 'application/json',
-    'Accept': 'application/json',
-    ...options.headers,
-  };
+  for (let i = 0; i < bases.length; i++) {
+    const base = bases[i];
+    const url = `${base}${normalizedPath}`;
 
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
+    try {
+      const headers = {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        ...options.headers,
+      };
+
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
+      const res = await fetch(url, {
+        ...options,
+        headers,
+      });
+
+      // If this endpoint returned 404 and we have other candidates, try next candidate
+      if (res.status === 404 && i < bases.length - 1) {
+        console.warn(`[adminService] 404 at ${url}, trying alternative candidate...`);
+        continue;
+      }
+
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        const error = new Error(data.message || `Request failed with status ${res.status}`);
+        error.status = res.status;
+        error.data = data;
+        throw error;
+      }
+
+      // Success! Cache this working base URL for subsequent requests
+      cachedWorkingBase = base;
+      return data;
+    } catch (err) {
+      lastError = err;
+      // If it's a network error (e.g. Failed to fetch or 404) and we have alternatives, try next
+      if (i < bases.length - 1 && (err.name === 'TypeError' || err.status === 404)) {
+        continue;
+      }
+      throw err;
+    }
   }
 
-  const res = await fetch(url, {
-    ...options,
-    headers,
-  });
-
-  const data = await res.json().catch(() => ({}));
-
-  if (!res.ok) {
-    const error = new Error(data.message || `Request failed with status ${res.status}`);
-    error.status = res.status;
-    error.data = data;
-    throw error;
-  }
-
-  return data;
+  throw lastError || new Error('All admin API endpoints failed');
 };
 
 /**

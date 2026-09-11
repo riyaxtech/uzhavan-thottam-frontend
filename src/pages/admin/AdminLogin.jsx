@@ -40,7 +40,13 @@ const AdminLogin = () => {
       navigate('/admin', { replace: true });
     } catch (err) {
       console.error('Login error:', err);
-      setError(err.message || 'Invalid admin credentials. Please try again.');
+      if (err.status === 401 || err.message?.toLowerCase().includes('invalid')) {
+        setError('Invalid admin username or password.');
+      } else if (err.status === 404 || err.message?.includes('404')) {
+        setError('Backend service not reached (404). If testing locally, make sure the backend server is started.');
+      } else {
+        setError(err.message || 'Unable to sign in. Please try again.');
+      }
     } finally {
       setIsSubmitting(false);
     }
