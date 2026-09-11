@@ -6,13 +6,16 @@ import './index.css'
 import App from './App.jsx'
 
 import { CartProvider } from './context/CartContext.jsx'
+import { AdminAuthProvider } from './context/AdminAuthContext.jsx'
 
 createRoot(document.getElementById('root')).render(
   <HelmetProvider>
     <BrowserRouter>
-      <CartProvider>
-        <App />
-      </CartProvider>
+      <AdminAuthProvider>
+        <CartProvider>
+          <App />
+        </CartProvider>
+      </AdminAuthProvider>
     </BrowserRouter>
   </HelmetProvider>
 )

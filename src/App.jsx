@@ -3,7 +3,7 @@ import MainLayout from './layouts/MainLayout';
 import { Routes, Route, useLocation } from 'react-router-dom';
 import { AnimatePresence } from 'framer-motion';
 
-// Pages
+// Customer Storefront Pages
 import Home from './pages/Home';
 import About from './pages/About';
 import Products from './pages/Products';
@@ -12,13 +12,45 @@ import Contact from './pages/Contact';
 import Checkout from './pages/Checkout';
 import ProductDetail from './pages/ProductDetail';
 
+// Admin Portal Pages & Protection
+import AdminLogin from './pages/admin/AdminLogin';
+import AdminDashboard from './pages/admin/AdminDashboard';
+import ProtectedRoute from './components/admin/ProtectedRoute';
+
 function App() {
   const location = useLocation();
+  const isAdminRoute = location.pathname === '/login' || location.pathname.startsWith('/admin');
 
   React.useEffect(() => {
     window.scrollTo(0, 0);
   }, [location.pathname]);
 
+  // Admin routes: Dedicated standalone layouts, zero customer navigation/footer contamination
+  if (isAdminRoute) {
+    return (
+      <Routes>
+        <Route path="/login" element={<AdminLogin />} />
+        <Route
+          path="/admin"
+          element={
+            <ProtectedRoute>
+              <AdminDashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/*"
+          element={
+            <ProtectedRoute>
+              <AdminDashboard />
+            </ProtectedRoute>
+          }
+        />
+      </Routes>
+    );
+  }
+
+  // Customer facing website: Unchanged with MainLayout and AnimatePresence
   return (
     <MainLayout>
       <AnimatePresence mode="wait">
@@ -38,3 +70,4 @@ function App() {
 }
 
 export default App;
+

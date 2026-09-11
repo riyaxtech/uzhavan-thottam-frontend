@@ -62,6 +62,36 @@ const OrderSchema = new mongoose.Schema(
       enum: ['Pending', 'Confirmed', 'Processing', 'Dispatched', 'Delivered', 'Cancelled'],
       default: 'Pending',
     },
+    paymentStatus: {
+      type: String,
+      enum: ['Pending', 'Paid'],
+      default: 'Pending',
+      index: true,
+    },
+    dispatchStatus: {
+      type: String,
+      enum: ['Pending', 'Dispatched'],
+      default: 'Pending',
+      index: true,
+    },
+    deliveryStatus: {
+      type: String,
+      enum: ['Pending', 'Delivered'],
+      default: 'Pending',
+      index: true,
+    },
+    transactionId: {
+      type: String,
+      default: '',
+    },
+    paymentDate: {
+      type: String,
+      default: '',
+    },
+    amountPaid: {
+      type: Number,
+      default: 0,
+    },
   },
   {
     timestamps: true,
